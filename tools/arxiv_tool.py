@@ -10,30 +10,44 @@ def search_arxiv(query: str) -> str:
 
     try:
 
+        client = arxiv.Client()
+
         search = arxiv.Search(
             query=query,
-            max_results=5
+            max_results=5,
+            sort_by=arxiv.SortCriterion.Relevance
         )
 
         results = []
 
-        for paper in search.results():
+        for paper in client.results(search):
 
             results.append(
                 f"""
-Título: {paper.title}
+                Título: {paper.title}
 
-Autores: {', '.join([a.name for a in paper.authors])}
+                Autores: {', '.join(a.name for a in paper.authors)}
 
-Resumo:
-{paper.summary[:1000]}
+                Resumo:
+                {paper.summary[:1000]}
 
-URL:
-{paper.entry_id}
-"""
+                PDF:
+                {paper.pdf_url}
+
+                URL:
+                {paper.entry_id}
+                """
             )
 
         return "\n\n".join(results)
 
     except Exception as e:
-        return str(e)
+        return f"Erro ao buscar artigos: {e}"
+
+
+if __name__ == "__main__":
+    print(
+    search_arxiv.invoke(
+        {"query": "Attention Is All You Need"}
+        )
+    )

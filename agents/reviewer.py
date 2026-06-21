@@ -10,7 +10,6 @@ with open("prompts/reviewer_system.txt", "r", encoding="utf-8") as f:
 template = ChatPromptTemplate.from_messages(
     [
         ("system", system_prompt),
-        ("system", "Context Window:\n{context_window}"),
         ("human", "Input: {query}")
     ]
 )
@@ -22,15 +21,11 @@ llm = ChatGroq(
 
 
 class ReviewerAgent:
-    def __init__(self, name: str):
-        self.name = name
 
-    def get_response(self, query: str, context_window: list[str]) -> str:
-        context_text = "\n".join(context_window)
+    def get_response(self, query: str) -> str:
 
         messages = template.format_messages(
             query=query,
-            context_window=context_text
         )
 
         response = llm.invoke(messages)
@@ -51,7 +46,6 @@ if __name__ == "__main__":
 
     response = reviewer.get_response(
         query=query,
-        context_window=context_window
     )
 
     print("\n=== REVIEWER RESPONSE ===\n")

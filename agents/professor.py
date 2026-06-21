@@ -2,6 +2,8 @@ from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 
+from models.study_material import StudyMaterial
+
 load_dotenv()
 
 with open("prompts/professor_system.txt", "r", encoding="utf-8") as f:
@@ -22,10 +24,17 @@ llm = ChatGroq(
 
 
 class ProfessorAgent:
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self):
+        self.structured_llm = llm.with_structured_output(
+            StudyMaterial
+        )
 
-    def get_response(self, query: str, context_window: list[str]) -> str:
+    def get_response(
+        self,
+        query: str,
+        context_window: list[str]
+    ) -> StudyMaterial:
+
         context_text = "\n".join(context_window)
 
         messages = template.format_messages(
@@ -33,26 +42,21 @@ class ProfessorAgent:
             context_window=context_text
         )
 
-        response = llm.invoke(messages)
-
-        return response.content
+        return self.structured_llm.invoke(
+            messages
+        )
 
 
 if __name__ == "__main__":
-    professor = ProfessorAgent("Professor")
-
-    query = "What are the main contributions of the paper 'Attention is All You Need'?"
-
-    context_window = [
-        "The paper introduces the Transformer architecture, which relies entirely on self-attention mechanisms, dispensing with recurrent and convolutional layers.",
-        "The Transformer achieves state-of-the-art performance in various natural language processing tasks.",
-        "The architecture became the foundation for modern LLMs such as GPT, LLaMA, Claude and Gemini."
+    professor = ProfessorAgent()
+    
+    context = [
+        "The Pythagorean theorem states that in a right triangle, the square of the hypotenuse is equal to the sum of the squares of the other two sides."
     ]
 
     response = professor.get_response(
-        query=query,
-        context_window=context_window
+        query="Explain the Pythagorean theorem.",
+        context_window=context
     )
 
-    print("\n=== PROFESSOR RESPONSE ===\n")
     print(response)

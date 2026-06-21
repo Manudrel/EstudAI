@@ -8,7 +8,12 @@ from tools.arxiv_tool import search_arxiv
 from tools.web_search_tool import web_search
 from tools.pdf_tool import read_pdf
 
+from models.research_report import ResearchReport
+from models.research_step import ResearchStep
+
 load_dotenv()
+
+MAX_TOOL_RESULT = 2000
 
 with open(
     "prompts/researcher_system.txt",
@@ -46,7 +51,12 @@ class ResearcherAgent:
             list(TOOLS.values())
         )
 
-    def get_response(self, query: str) -> str:
+
+    def get_response(self, query: str) -> ResearchReport:
+
+        research_memory = []
+        
+        executed_calls = set()
 
         messages = PROMPT.format_messages(
             query=query
@@ -63,13 +73,22 @@ class ResearcherAgent:
             print(f"\n=== ITERATION {iteration + 1} ===")
             print("Tool calls:", response.tool_calls)
 
-            # Caso não haja chamadas de ferramentas, retornamos a resposta final
+            # Caso não haja chamadas de ferramentas, retorna a resposta final
             if not response.tool_calls:
 
                 if response.content:
-                    return response.content
+                    return ResearchReport(
+                        report=response.content,
+                        research_steps=[ResearchStep(**step) for step in research_memory]
+                    )
 
-                return "Nenhuma resposta foi gerada."
+                return ResearchReport(
+                    report="Nenhuma resposta foi gerada.",
+                    research_steps=[
+                        ResearchStep(**step)
+                        for step in research_memory
+                    ]
+                )
 
             messages.append(response)
 
@@ -77,6 +96,21 @@ class ResearcherAgent:
 
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
+
+                call_signature = (
+                    tool_name,
+                    str(tool_args)
+                )
+
+                if call_signature in executed_calls:
+
+                    print(
+                        f"Tool já executada: {tool_name}"
+                    )
+
+                    continue
+
+                executed_calls.add(call_signature)
 
                 print(f"\nExecutando Tool: {tool_name}")
                 print(f"Args: {tool_args}")
@@ -104,15 +138,34 @@ class ResearcherAgent:
                             f"{tool_name}: {str(e)}"
                         )
 
-                messages.append(
-                    ToolMessage(
-                        content=str(tool_result),
-                        tool_call_id=tool_call["id"]
-                    )
+
+
+                        tool_result_str = str(tool_result)
+
+                        if len(tool_result_str) > MAX_TOOL_RESULT:
+                            tool_result_str = (
+                                tool_result_str[:MAX_TOOL_RESULT]
+                                + "\n\n[RESULTADO TRUNCADO]"
+                            )
+
+                        messages.append(
+                            ToolMessage(
+                                content=tool_result_str,
+                                tool_call_id=tool_call["id"]
+                            )
+                        )
+
+                research_memory.append(
+                    {
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "result": str(tool_result)[:1000]
+                    }
                 )
 
-        return (
-            "Limite máximo de interações com ferramentas atingido."
+        return ResearchReport(
+            report="Limite máximo de interações com ferramentas atingido.",
+            research_steps=[ResearchStep(**step) for step in research_memory]
         )
 
 

@@ -24,6 +24,9 @@ class StudyOrchestrator:
                 research_report.report
             )
         )
+        print("=== ORCHESTRATOR LOG ===")
+        print(research_report.report[:500])
+        print(reviewed_report[:500])
 
         study_material = (
             self.professor.get_response(

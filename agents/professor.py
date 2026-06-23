@@ -18,7 +18,7 @@ template = ChatPromptTemplate.from_messages(
 )
 
 llm = ChatGroq(
-    model="llama-3.1-8b-instant",
+    model="openai/gpt-oss-120b",
     temperature=0.3
 )
 
@@ -42,8 +42,9 @@ class ProfessorAgent:
             context_window=context_text
         )
 
+
         return self.structured_llm.invoke(
-            messages
+           messages
         )
 
 

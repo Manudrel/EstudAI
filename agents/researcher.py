@@ -1,8 +1,11 @@
+from urllib import response
+
 from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage
 
 from tools.arxiv_tool import search_arxiv
 from tools.web_search_tool import web_search
@@ -13,7 +16,7 @@ from models.research_step import ResearchStep
 
 load_dotenv()
 
-MAX_TOOL_RESULT = 2000
+MAX_TOOL_RESULT = 4000
 
 with open(
     "prompts/researcher_system.txt",
@@ -43,8 +46,9 @@ class ResearcherAgent:
     def __init__(self):
 
         self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
-            temperature=0.3
+            model="openai/gpt-oss-120b",
+            temperature=0.3,
+            max_tokens=2000
         )
 
         self.llm_with_tools = self.llm.bind_tools(
@@ -55,40 +59,58 @@ class ResearcherAgent:
     def get_response(self, query: str) -> ResearchReport:
 
         research_memory = []
-        
         executed_calls = set()
 
         messages = PROMPT.format_messages(
             query=query
         )
 
-        max_iterations = 5
+        max_iterations = 4
 
         for iteration in range(max_iterations):
+
+            print(f"\n=== ITERATION {iteration + 1} ===")
 
             response = self.llm_with_tools.invoke(
                 messages
             )
+            print("\n=== RESPONSE CONTENT ===")
+            print(response.content)
 
-            print(f"\n=== ITERATION {iteration + 1} ===")
-            print("Tool calls:", response.tool_calls)
+            print(
+                "Tool calls:",
+                response.tool_calls
+            )
 
-            # Caso não haja chamadas de ferramentas, retorna a resposta final
+            # Caso não haja chamadas de ferramentas, finaliza o loop e retorna o relatório
             if not response.tool_calls:
+                print("\n=== FINAL REPORT ===")
+                print(response.content[:1000])
 
-                if response.content:
-                    return ResearchReport(
-                        report=response.content,
-                        research_steps=[ResearchStep(**step) for step in research_memory]
-                    )
+                if len(research_memory) == 0:
+                    messages.append(
+                        (
+                            "human",
+                            """
+                            Você ainda não realizou nenhuma pesquisa.
+
+                            Utilize pelo menos uma ferramenta antes de gerar
+                            o relatório final.
+                            """
+                        )
+                    )                 
+                    continue
 
                 return ResearchReport(
-                    report="Nenhuma resposta foi gerada.",
+                    report=response.content
+                    if response.content
+                    else "Nenhum relatório foi gerado.",
                     research_steps=[
                         ResearchStep(**step)
                         for step in research_memory
                     ]
                 )
+            
 
             messages.append(response)
 
@@ -96,6 +118,23 @@ class ResearcherAgent:
 
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
+                
+                if tool_name == "web_search":    
+                    if "query" not in tool_args:
+
+                            messages.append(
+                                ToolMessage(
+                                    content=(
+                                        "Erro: a ferramenta web_search "
+                                        "exige o parâmetro 'query'. "
+                                        "Tente novamente."
+                                    ),
+                                    tool_call_id=tool_call["id"]
+                                )
+                            )
+
+                            continue
+                    
 
                 call_signature = (
                     tool_name,
@@ -108,14 +147,33 @@ class ResearcherAgent:
                         f"Tool já executada: {tool_name}"
                     )
 
+                    messages.append(
+                        ToolMessage(
+                            content=(
+                                "Esta busca já foi executada anteriormente. "
+                                "Utilize as informações já obtidas e gere "
+                                "o relatório final."
+                            ),
+                            tool_call_id=tool_call["id"]
+                        )
+                    )
+
                     continue
 
-                executed_calls.add(call_signature)
+                executed_calls.add(
+                    call_signature
+                )
 
-                print(f"\nExecutando Tool: {tool_name}")
-                print(f"Args: {tool_args}")
+                print(
+                    f"\nExecutando Tool: {tool_name}"
+                )
+                print(
+                    f"Args: {tool_args}"
+                )
 
-                tool = TOOLS.get(tool_name)
+                tool = TOOLS.get(
+                    tool_name
+                )
 
                 if not tool:
 
@@ -126,48 +184,69 @@ class ResearcherAgent:
                 else:
 
                     try:
+
                         tool_result = tool.invoke(
                             tool_args
                         )
 
-
                     except Exception as e:
 
                         tool_result = (
-                            f"Erro ao executar tool "
+                            f"Erro ao executar "
                             f"{tool_name}: {str(e)}"
                         )
 
+                tool_result_str = str(
+                    tool_result
+                )
 
+                if len(tool_result_str) > MAX_TOOL_RESULT:
 
-                        tool_result_str = str(tool_result)
+                    tool_result_str = (
+                        tool_result_str[
+                            :MAX_TOOL_RESULT
+                        ]
+                        + "\n\n[RESULTADO TRUNCADO]"
+                    )
 
-                        if len(tool_result_str) > MAX_TOOL_RESULT:
-                            tool_result_str = (
-                                tool_result_str[:MAX_TOOL_RESULT]
-                                + "\n\n[RESULTADO TRUNCADO]"
-                            )
-
-                        messages.append(
-                            ToolMessage(
-                                content=tool_result_str,
-                                tool_call_id=tool_call["id"]
-                            )
-                        )
+                messages.append(
+                    ToolMessage(
+                        content=tool_result_str,
+                        tool_call_id=tool_call["id"]
+                    )
+                )
+                print("\n===  TOOL RESULT  ===")
+                print(tool_result_str[:500])
 
                 research_memory.append(
                     {
                         "tool": tool_name,
                         "args": tool_args,
-                        "result": str(tool_result)[:1000]
+                        "result": tool_result_str[:1000]
                     }
                 )
 
-        return ResearchReport(
-            report="Limite máximo de interações com ferramentas atingido.",
-            research_steps=[ResearchStep(**step) for step in research_memory]
+            if iteration >= 2:
+                break
+
+        final_response = self.llm.invoke(
+            messages + [
+                HumanMessage(
+                    content=(
+                        "Com base apenas nas informações já coletadas, "
+                        "gere o relatório final completo."
+                    )
+                )
+            ]
         )
 
+        return ResearchReport(
+            report=final_response.content,
+            research_steps=[
+                ResearchStep(**step)
+                for step in research_memory
+            ]
+        )
 
 if __name__ == "__main__":
 

@@ -1,15 +1,17 @@
+from typing import Literal
 from pydantic import BaseModel, Field
+
 
 class Question(BaseModel):
 
-    question: str = Field(
-        description="Pergunta para o aluno"
-    )
+    question: str
 
-    difficulty: str = Field(
-        description="easy, medium ou hard"
-    )
+    difficulty: Literal[
+        "easy",
+        "medium",
+        "hard"
+    ]
 
     answer: str = Field(
-        description="Resposta correta"
+        description="Resposta correta e explicada"
     )

@@ -16,16 +16,17 @@ template = ChatPromptTemplate.from_messages(
 
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
-    temperature=0.3
+    temperature=0.3,
+    max_tokens=1500
 )
 
 
 class ReviewerAgent:
 
-    def get_response(self, query: str) -> str:
+    def get_response(self, research_report: str) -> str:
 
         messages = template.format_messages(
-            query=query,
+            query=research_report,
         )
 
         response = llm.invoke(messages)
@@ -36,16 +37,10 @@ class ReviewerAgent:
 if __name__ == "__main__":
     reviewer = ReviewerAgent("Reviewer")
 
-    query = "What are the main contributions of the paper 'Attention is All You Need'?"
-
-    context_window = [
-        "The paper introduces the Transformer architecture, which relies entirely on self-attention mechanisms, dispensing with recurrent and convolutional layers.",
-        "The Transformer achieves state-of-the-art performance in various natural language processing tasks.",
-        "The architecture became the foundation for modern LLMs such as GPT, LLaMA, Claude and Gemini."
-    ]
+    research_report = "What are the main contributions of the paper 'Attention is All You Need'?"
 
     response = reviewer.get_response(
-        query=query,
+        query=research_report,
     )
 
     print("\n=== REVIEWER RESPONSE ===\n")

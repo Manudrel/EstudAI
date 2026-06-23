@@ -1,5 +1,5 @@
 from langchain.tools import tool
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 
 @tool
@@ -21,17 +21,27 @@ def web_search(query: str) -> str:
 
                 results.append(
                     f"""
-Título: {r.get('title')}
+                        Fonte: {r.get('title')}
 
-Descrição:
-{r.get('body')}
+                        Resumo:
+                        {r.get('body')}
 
-URL:
-{r.get('href')}
-"""
+                        Link:
+                        {r.get('href')}
+                        """
                 )
 
         return "\n\n".join(results)
 
     except Exception as e:
         return str(e)
+
+if __name__ == "__main__":
+
+    resultado = web_search.invoke(
+        {
+            "query": "Spring Boot"
+        }
+    )
+
+    print(resultado)

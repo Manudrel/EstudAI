@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 
@@ -6,16 +7,6 @@ from models.study_material import StudyMaterial
 
 load_dotenv()
 
-with open("prompts/professor_system.txt", "r", encoding="utf-8") as f:
-    system_prompt = f.read()
-
-template = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt),
-        ("system", "Context Window:\n{context_window}"),
-        ("human", "Input: {query}")
-    ]
-)
 
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
@@ -23,10 +14,72 @@ llm = ChatGroq(
 )
 
 
+planning_prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """
+            Você é um professor especialista.
+
+            Analise o conteúdo recebido
+            e monte um plano de ensino.
+            """
+        ),
+        (
+            "human",
+            """
+            Tema:
+            {query}
+
+            Contexto:
+            {context}
+            """
+        )
+    ]
+)
+
+material_prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """
+            Você é um professor.
+
+            Gere material de estudo completo
+            seguindo exatamente o schema solicitado.
+            """
+        ),
+        (
+            "human",
+            """
+            Tema:
+            {query}
+
+            Plano:
+            {plan}
+
+            Contexto:
+            {context}
+            """
+        )
+    ]
+)
+
+
 class ProfessorAgent:
+
     def __init__(self):
-        self.structured_llm = llm.with_structured_output(
-            StudyMaterial
+
+        self.planning_chain = (
+            planning_prompt
+            | llm
+        )
+
+        self.material_chain = (
+            material_prompt
+            | llm.with_structured_output(
+                StudyMaterial
+            )
         )
 
     def get_response(
@@ -35,29 +88,33 @@ class ProfessorAgent:
         context_window: list[str]
     ) -> StudyMaterial:
 
-        context_text = "\n".join(context_window)
-
-        messages = template.format_messages(
-            query=query,
-            context_window=context_text
+        context_text = "\n".join(
+            context_window
         )
 
-
-        return self.structured_llm.invoke(
-           messages
+        print(
+            "\n=== PROFESSOR STEP 1: PLANNING ==="
         )
 
+        plan = self.planning_chain.invoke(
+            {
+                "query": query,
+                "context": context_text
+            }
+        )
 
-if __name__ == "__main__":
-    professor = ProfessorAgent()
-    
-    context = [
-        "The Pythagorean theorem states that in a right triangle, the square of the hypotenuse is equal to the sum of the squares of the other two sides."
-    ]
+        print(plan.content[:1000])
 
-    response = professor.get_response(
-        query="Explain the Pythagorean theorem.",
-        context_window=context
-    )
+        print(
+            "\n=== PROFESSOR STEP 2: MATERIAL GENERATION ==="
+        )
 
-    print(response)
+        material = self.material_chain.invoke(
+            {
+                "query": query,
+                "plan": plan.content,
+                "context": context_text
+            }
+        )
+
+        return material

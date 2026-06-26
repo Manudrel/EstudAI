@@ -157,28 +157,17 @@ git clone https://github.com/seu-usuario/EstudAI.git
 cd EstudAI
 ```
 
-### 2. Criar Ambiente Virtual
+### 2. Baixar o UV
 
 ```bash
-python -m venv venv
+pip install uv
 ```
 
-Linux/macOS:
-
-```bash
-source venv/bin/activate
-```
-
-Windows:
-
-```bash
-venv\Scripts\activate
-```
 
 ### 3. Instalar Dependências
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 4. Configurar Variáveis de Ambiente

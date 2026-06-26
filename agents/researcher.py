@@ -21,16 +21,7 @@ with open(
     "r",
     encoding="utf-8"
 ) as f:
-    SYSTEM_PROMPT = f.read()
-
-
-PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", SYSTEM_PROMPT),
-        ("human", "{query}")
-    ]
-)
-
+    system_prompt = f.read()
 
 TOOLS = {
     "search_arxiv": search_arxiv,
@@ -38,28 +29,41 @@ TOOLS = {
     "read_pdf": read_pdf,
 }
 
+llm = ChatGroq(
+    model="openai/gpt-oss-120b",
+    temperature=0.3,
+    max_tokens=3000
+)
+
+llm_with_tools = llm.bind_tools(
+    list(TOOLS.values())
+)
+
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", system_prompt),
+        ("human", "{query}")
+    ]
+)
+
+chain = prompt | llm_with_tools
+
 
 class ResearcherAgent:
 
     def __init__(self):
+        self.chain = chain
+        self.llm = llm
 
-        self.llm = ChatGroq(
-            model="openai/gpt-oss-120b",
-            temperature=0.3,
-            max_tokens=2000
-        )
-
-        self.llm_with_tools = self.llm.bind_tools(
-            list(TOOLS.values())
-        )
-
-
-    def get_response(self, query: str) -> ResearchReport:
+    def get_response(
+        self,
+        query: str
+    ) -> ResearchReport:
 
         research_memory = []
         executed_calls = set()
 
-        messages = PROMPT.format_messages(
+        messages = prompt.format_messages(
             query=query
         )
 
@@ -67,11 +71,19 @@ class ResearcherAgent:
 
         for iteration in range(max_iterations):
 
-            print(f"\n=== ITERATION {iteration + 1} ===")
-
-            response = self.llm_with_tools.invoke(
-                messages
+            print(
+                f"\n=== ITERATION {iteration + 1} ==="
             )
+
+            if iteration == 0:
+                response = self.chain.invoke(
+                    {"query": query}
+                )
+            else:
+                response = llm_with_tools.invoke(
+                    messages
+                )
+
             print("\n=== RESPONSE CONTENT ===")
             print(response.content)
 
@@ -80,8 +92,9 @@ class ResearcherAgent:
                 response.tool_calls
             )
 
-            # Caso não haja chamadas de ferramentas, finaliza o loop e retorna o relatório
+            # Caso não haja chamadas de ferramentas
             if not response.tool_calls:
+
                 print("\n=== FINAL REPORT ===")
                 print(response.content[:1000])
 
@@ -96,7 +109,7 @@ class ResearcherAgent:
                             o relatório final.
                             """
                         )
-                    )                 
+                    )
                     continue
 
                 return ResearchReport(
@@ -108,7 +121,6 @@ class ResearcherAgent:
                         for step in research_memory
                     ]
                 )
-            
 
             messages.append(response)
 
@@ -116,8 +128,8 @@ class ResearcherAgent:
 
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
-                
-                if tool_name == "web_search":    
+
+                if tool_name == "web_search":
                     if "query" not in tool_args:
 
                             messages.append(
@@ -132,7 +144,7 @@ class ResearcherAgent:
                             )
 
                             continue
-                    
+
 
                 call_signature = (
                     tool_name,

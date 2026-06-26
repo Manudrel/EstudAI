@@ -1,4 +1,6 @@
 from dotenv import load_dotenv
+import json
+
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 
@@ -6,8 +8,13 @@ from models.study_material import StudyMaterial
 
 load_dotenv()
 
-with open("prompts/professor_system.txt", "r", encoding="utf-8") as f:
+with open(
+    "prompts/professor_system.txt",
+    "r",
+    encoding="utf-8"
+) as f:
     system_prompt = f.read()
+
 
 template = ChatPromptTemplate.from_messages(
     [
@@ -17,16 +24,14 @@ template = ChatPromptTemplate.from_messages(
     ]
 )
 
-llm = ChatGroq(
-    model="openai/gpt-oss-120b",
-    temperature=0.3
-)
-
 
 class ProfessorAgent:
+
     def __init__(self):
-        self.structured_llm = llm.with_structured_output(
-            StudyMaterial
+
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-120b",
+            temperature=0.3
         )
 
     def get_response(
@@ -35,19 +40,42 @@ class ProfessorAgent:
         context_window: list[str]
     ) -> StudyMaterial:
 
-        context_text = "\n".join(context_window)
+        context_text = "\n".join(
+            context_window
+        )
 
         messages = template.format_messages(
             query=query,
             context_window=context_text
         )
 
-
-        return self.structured_llm.invoke(
-           messages
+        response = self.llm.invoke(
+            messages
         )
 
+        try:
 
+            return StudyMaterial.model_validate_json(
+                response.content
+            )
+
+        except Exception:
+
+            try:
+
+                return StudyMaterial.model_validate(
+                    json.loads(response.content)
+                )
+
+            except Exception as e:
+
+                print("\n========== RAW RESPONSE ==========\n")
+                print(response.content)
+                print("\n==================================\n")
+
+                raise RuntimeError(
+                    f"Erro ao converter JSON para StudyMaterial:\n{e}"
+                )
 if __name__ == "__main__":
     professor = ProfessorAgent()
     

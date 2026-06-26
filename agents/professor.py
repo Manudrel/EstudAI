@@ -8,59 +8,58 @@ from models.study_material import StudyMaterial
 load_dotenv()
 
 
-llm = ChatGroq(
-    model="openai/gpt-oss-120b",
-    temperature=0.3
-)
+with open(
+    "prompts/professor_planning.txt",
+    encoding="utf-8"
+) as f:
+    planning_system = f.read()
+
+with open(
+    "prompts/professor_material.txt",
+    encoding="utf-8"
+) as f:
+    material_system = f.read()
 
 
 planning_prompt = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            """
-            Você é um professor especialista.
-
-            Analise o conteúdo recebido
-            e monte um plano de ensino.
-            """
-        ),
+        ("system", planning_system),
         (
             "human",
             """
-            Tema:
-            {query}
+Tema:
+{query}
 
-            Contexto:
-            {context}
-            """
+Contexto:
+
+{context}
+"""
         )
     ]
 )
 
 material_prompt = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            """
-            Você é um professor.
-
-            Gere material de estudo completo
-            seguindo exatamente o schema solicitado.
-            """
-        ),
+        ("system", material_system),
         (
             "human",
             """
-            Tema:
-            {query}
+Tema:
 
-            Plano:
-            {plan}
+{query}
 
-            Contexto:
-            {context}
-            """
+=============================
+
+Plano Pedagógico:
+
+{plan}
+
+=============================
+
+Contexto Científico:
+
+{context}
+"""
         )
     ]
 )
@@ -70,10 +69,13 @@ class ProfessorAgent:
 
     def __init__(self):
 
-        self.planning_chain = (
-            planning_prompt
-            | llm
+        llm = ChatGroq(
+            model="openai/gpt-oss-120b",
+            temperature=0.3,
+            max_tokens=4000
         )
+
+        self.planning_chain = planning_prompt | llm
 
         self.material_chain = (
             material_prompt
@@ -88,33 +90,33 @@ class ProfessorAgent:
         context_window: list[str]
     ) -> StudyMaterial:
 
-        context_text = "\n".join(
-            context_window
-        )
+        context = "\n\n".join(context_window)
 
         print(
-            "\n=== PROFESSOR STEP 1: PLANNING ==="
+            "\n=== PROFESSOR :: PEDAGOGICAL PLANNING ==="
         )
 
         plan = self.planning_chain.invoke(
             {
                 "query": query,
-                "context": context_text
+                "context": context
             }
         )
 
-        print(plan.content[:1000])
+        print(plan.content[:800])
 
         print(
-            "\n=== PROFESSOR STEP 2: MATERIAL GENERATION ==="
+            "\n=== PROFESSOR :: MATERIAL GENERATION ==="
         )
 
         material = self.material_chain.invoke(
             {
                 "query": query,
                 "plan": plan.content,
-                "context": context_text
+                "context": context
             }
         )
 
         return material
+
+

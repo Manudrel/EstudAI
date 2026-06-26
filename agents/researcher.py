@@ -2,8 +2,9 @@ from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import ToolMessage
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import (
+    ToolMessage,
+)
 
 from tools.arxiv_tool import search_arxiv
 from tools.web_search_tool import web_search
@@ -16,6 +17,11 @@ load_dotenv()
 
 MAX_TOOL_RESULT = 4000
 
+
+# ==========================
+# PROMPTS
+# ==========================
+
 with open(
     "prompts/researcher_system.txt",
     "r",
@@ -23,11 +29,60 @@ with open(
 ) as f:
     SYSTEM_PROMPT = f.read()
 
+with open(
+    "prompts/researcher_planning.txt",
+    "r",
+    encoding="utf-8"
+) as f:
+    PLANNING_PROMPT = f.read()
 
-PROMPT = ChatPromptTemplate.from_messages(
+with open(
+    "prompts/researcher_synthesis.txt",
+    "r",
+    encoding="utf-8"
+) as f:
+    SYNTHESIS_PROMPT = f.read()
+
+
+planning_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", PLANNING_PROMPT),
+        ("human", "{query}")
+    ]
+)
+
+research_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", SYSTEM_PROMPT),
+        (
+            "system",
+            """
+Plano de Pesquisa
+
+{plan}
+            """
+        ),
         ("human", "{query}")
+    ]
+)
+
+synthesis_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", SYNTHESIS_PROMPT),
+        (
+            "human",
+            """
+Tema:
+
+{query}
+
+================================
+
+Evidências Coletadas:
+
+{memory}
+"""
+        )
     ]
 )
 
@@ -53,15 +108,84 @@ class ResearcherAgent:
             list(TOOLS.values())
         )
 
+        self.planning_chain = (
+            planning_prompt
+            | self.llm
+        )
 
-    def get_response(self, query: str) -> ResearchReport:
+        self.synthesis_chain = (
+            synthesis_prompt
+            | self.llm
+        )
+
+    def _execute_tool(
+        self,
+        tool_name,
+        tool_args
+    ):
+
+        tool = TOOLS.get(tool_name)
+
+        if tool is None:
+
+            return (
+                f"Tool '{tool_name}' não encontrada."
+            )
+
+        try:
+
+            result = tool.invoke(
+                tool_args
+            )
+
+        except Exception as e:
+
+            result = (
+                f"Erro ao executar "
+                f"{tool_name}: {str(e)}"
+            )
+
+        result = str(result)
+
+        if len(result) > MAX_TOOL_RESULT:
+
+            result = (
+                result[:MAX_TOOL_RESULT]
+                + "\n\n[RESULTADO TRUNCADO]"
+            )
+
+        return result
+
+    def get_response(
+        self,
+        query: str
+    ) -> ResearchReport:
+
+        # =====================================
+        # STEP 1 - PEDAGOGICAL PLANNING
+        # =====================================
+
+        print("\n=== RESEARCH PLANNING ===")
+
+        plan = self.planning_chain.invoke(
+            {
+                "query": query
+            }
+        )
+
+        print(plan.content[:1000])
+
+        # =====================================
+        # INITIAL PROMPT
+        # =====================================
+
+        messages = research_prompt.format_messages(
+            query=query,
+            plan=plan.content
+        )
 
         research_memory = []
         executed_calls = set()
-
-        messages = PROMPT.format_messages(
-            query=query
-        )
 
         max_iterations = 4
 
@@ -72,6 +196,7 @@ class ResearcherAgent:
             response = self.llm_with_tools.invoke(
                 messages
             )
+
             print("\n=== RESPONSE CONTENT ===")
             print(response.content)
 
@@ -80,59 +205,63 @@ class ResearcherAgent:
                 response.tool_calls
             )
 
-            # Caso não haja chamadas de ferramentas, finaliza o loop e retorna o relatório
+            # -----------------------------
+            # FINALIZA A PESQUISA
+            # -----------------------------
+
             if not response.tool_calls:
-                print("\n=== FINAL REPORT ===")
-                print(response.content[:1000])
 
                 if len(research_memory) == 0:
+
                     messages.append(
                         (
                             "human",
                             """
-                            Você ainda não realizou nenhuma pesquisa.
+                            Você ainda não utilizou nenhuma ferramenta.
 
-                            Utilize pelo menos uma ferramenta antes de gerar
-                            o relatório final.
+                            Utilize pelo menos uma ferramenta antes
+                            de finalizar a pesquisa.
                             """
                         )
-                    )                 
+                    )
+
                     continue
 
-                return ResearchReport(
-                    report=response.content
-                    if response.content
-                    else "Nenhum relatório foi gerado.",
-                    research_steps=[
-                        ResearchStep(**step)
-                        for step in research_memory
-                    ]
-                )
-            
+                break
 
             messages.append(response)
+
+            # -----------------------------
+            # TOOL EXECUTION
+            # -----------------------------
 
             for tool_call in response.tool_calls:
 
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
-                
-                if tool_name == "web_search":    
-                    if "query" not in tool_args:
 
-                            messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Erro: a ferramenta web_search "
-                                        "exige o parâmetro 'query'. "
-                                        "Tente novamente."
-                                    ),
-                                    tool_call_id=tool_call["id"]
-                                )
-                            )
+                if (
+                    tool_name == "web_search"
+                    and "query" not in tool_args
+                ):
 
-                            continue
-                    
+                    messages.append(
+
+                        ToolMessage(
+
+                            content=(
+                                "Erro: web_search "
+                                "necessita do parâmetro "
+                                "'query'."
+                            ),
+
+                            tool_call_id=tool_call["id"]
+
+                        )
+
+                    )
+
+                    continue
 
                 call_signature = (
                     tool_name,
@@ -142,18 +271,22 @@ class ResearcherAgent:
                 if call_signature in executed_calls:
 
                     print(
-                        f"Tool já executada: {tool_name}"
+                        f"Pesquisa repetida: {tool_name}"
                     )
 
                     messages.append(
+
                         ToolMessage(
+
                             content=(
-                                "Esta busca já foi executada anteriormente. "
-                                "Utilize as informações já obtidas e gere "
-                                "o relatório final."
+                                "Esta pesquisa já foi "
+                                "realizada anteriormente."
                             ),
+
                             tool_call_id=tool_call["id"]
+
                         )
+
                     )
 
                     continue
@@ -163,104 +296,128 @@ class ResearcherAgent:
                 )
 
                 print(
-                    f"\nExecutando Tool: {tool_name}"
+                    f"\nExecutando {tool_name}"
                 )
+
+                print(tool_args)
+
+                tool_result = self._execute_tool(
+                    tool_name,
+                    tool_args
+                )
+
                 print(
-                    f"Args: {tool_args}"
+                    "\n=== TOOL RESULT ==="
                 )
 
-                tool = TOOLS.get(
-                    tool_name
-                )
-
-                if not tool:
-
-                    tool_result = (
-                        f"Tool '{tool_name}' não encontrada."
-                    )
-
-                else:
-
-                    try:
-
-                        tool_result = tool.invoke(
-                            tool_args
-                        )
-
-                    except Exception as e:
-
-                        tool_result = (
-                            f"Erro ao executar "
-                            f"{tool_name}: {str(e)}"
-                        )
-
-                tool_result_str = str(
-                    tool_result
-                )
-
-                if len(tool_result_str) > MAX_TOOL_RESULT:
-
-                    tool_result_str = (
-                        tool_result_str[
-                            :MAX_TOOL_RESULT
-                        ]
-                        + "\n\n[RESULTADO TRUNCADO]"
-                    )
+                print(tool_result[:500])
 
                 messages.append(
+
                     ToolMessage(
-                        content=tool_result_str,
+
+                        content=tool_result,
+
                         tool_call_id=tool_call["id"]
+
                     )
+
                 )
-                print("\n===  TOOL RESULT  ===")
-                print(tool_result_str[:500])
 
                 research_memory.append(
+
                     {
+
                         "tool": tool_name,
+
                         "args": tool_args,
-                        "result": tool_result_str[:1000]
+
+                        "result": tool_result[:1000]
+
                     }
+
                 )
 
-            if iteration >= 2:
-                break
+        # =====================================
+        # STEP 3 - SYNTHESIS
+        # =====================================
 
-        final_response = self.llm.invoke(
-            messages + [
-                HumanMessage(
-                    content=(
-                        "Com base apenas nas informações já coletadas, "
-                        "gere o relatório final completo."
-                    )
-                )
+        print("\n=== SYNTHESIS ===")
+
+        memory = "\n\n".join(
+
+            [
+
+                f"""
+                Ferramenta:
+                {step['tool']}
+
+                Parâmetros:
+                {step['args']}
+
+                Resultado:
+
+                {step['result']}
+                """
+
+                for step in research_memory
+
             ]
+
+        )
+
+        final_report = self.synthesis_chain.invoke(
+
+            {
+
+                "query": query,
+
+                "memory": memory
+
+            }
+
+        )
+
+        print(
+            "\n=== FINAL REPORT ==="
+        )
+
+        print(
+            final_report.content[:1000]
         )
 
         return ResearchReport(
-            report=final_response.content,
+
+            report=final_report.content,
+
             research_steps=[
+
                 ResearchStep(**step)
+
                 for step in research_memory
+
             ]
+
         )
+
 
 if __name__ == "__main__":
 
     researcher = ResearcherAgent()
 
-    response = researcher.get_response(
+    report = researcher.get_response(
         """
         Search for scientific papers about
         Attention Is All You Need.
 
         Explain:
+
         - Main contributions
         - Architecture
         - Impact on modern LLMs
         """
     )
 
-    print("\n=== RESEARCH REPORT ===\n")
-    print(response)
+    print("\n=== REPORT ===\n")
+
+    print(report)

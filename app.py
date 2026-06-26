@@ -63,6 +63,7 @@ def create_pdf(title: str, content: str):
 
     return buffer
 
+
 # =====================================
 # SIDEBAR
 # =====================================
@@ -73,24 +74,38 @@ with st.sidebar:
 
     st.markdown(
         """
-        ### Agentes
+### Sistema Multiagente
 
-        🔎 Researcher
+🔎 **Researcher**
 
-        🧐 Reviewer
+- Pesquisa científica
+- Busca em artigos
+- Busca na Web
 
-        👨‍🏫 Professor
-        """
+🧐 **Reviewer**
+
+- Revisão técnica
+- Organização
+- Validação
+
+👨‍🏫 **Professor**
+
+- Planejamento pedagógico
+- Material de estudo
+- Exercícios
+"""
     )
 
     st.divider()
 
-    st.markdown(
+    st.info(
         """
-        Sistema Multiagente para geração
-        automática de material de estudo.
-        """
+O EstudAI utiliza agentes especializados
+para transformar um tema em um material
+de estudo completo.
+"""
     )
+
 
 # =====================================
 # HEADER
@@ -100,36 +115,42 @@ st.title("📚 EstudAI")
 
 st.write(
     """
-    Gere aulas completas, exercícios e pesquisas
-    utilizando agentes especializados.
-    """
+Digite qualquer tema e o sistema irá pesquisar,
+revisar e gerar um material completo de estudo.
+"""
 )
 
 topic = st.text_input(
-    "Digite um tema para estudar",
-    value=st.session_state.topic
+    "Tema",
+    value=st.session_state.topic,
+    placeholder="Ex.: Attention Is All You Need"
 )
 
 # =====================================
 # EXECUÇÃO
 # =====================================
 
-if st.button("Gerar Material") and topic:
+if st.button(
+    "🚀 Gerar Material",
+    use_container_width=True
+):
 
-    st.session_state.topic = topic
+    if topic.strip():
 
-    orchestrator = StudyOrchestrator()
+        st.session_state.topic = topic
 
-    with st.spinner(
-        "Executando agentes..."
-    ):
+        orchestrator = StudyOrchestrator()
 
-        st.session_state.result = (
-            orchestrator.execute(topic)
-        )
+        with st.spinner(
+            "Os agentes estão trabalhando..."
+        ):
+
+            st.session_state.result = (
+                orchestrator.execute(topic)
+            )
 
 # =====================================
-# RESULTADO
+# RESULTADOS
 # =====================================
 
 if st.session_state.result:
@@ -138,6 +159,32 @@ if st.session_state.result:
 
     lesson = result["lesson"]
 
+    # -------------------------
+    # MÉTRICAS
+    # -------------------------
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Conceitos",
+            len(lesson.concepts)
+        )
+
+    with col2:
+        st.metric(
+            "Exercícios",
+            len(lesson.exercises)
+        )
+
+    with col3:
+        st.metric(
+            "Resumo",
+            len(lesson.summary_points)
+        )
+
+    st.divider()
+
     tabs = st.tabs(
         [
             "📖 Aula",
@@ -145,7 +192,6 @@ if st.session_state.result:
             "🔎 Pesquisa"
         ]
     )
-
     # =====================================
     # AULA
     # =====================================
@@ -154,106 +200,194 @@ if st.session_state.result:
 
         st.title(lesson.title)
 
-        st.header("Introdução")
+        st.header("📘 Introdução")
         st.write(lesson.introduction)
 
-        if hasattr(lesson, "concepts"):
+        st.divider()
 
-            st.header(
-                "Conceitos Fundamentais"
-            )
+        st.header("📚 Conceitos Fundamentais")
 
-            for concept in lesson.concepts:
+        for index, concept in enumerate(
+            lesson.concepts,
+            start=1
+        ):
+
+            with st.container(border=True):
 
                 st.subheader(
-                    concept.name
+                    f"{index}. {concept.name}"
                 )
 
                 st.markdown(
-                    f"**Definição**\n\n{concept.definition}"
+                    "**Definição**"
+                )
+
+                st.write(
+                    concept.definition
                 )
 
                 st.markdown(
-                    f"**Explicação**\n\n{concept.explanation}"
+                    "**Explicação**"
+                )
+
+                st.write(
+                    concept.explanation
                 )
 
                 st.info(
-                    f"Exemplo:\n\n{concept.example}"
+                    f"**Exemplo**\n\n{concept.example}"
                 )
 
-        else:
+        st.divider()
 
-            st.header("Explicação")
-            st.write(
-                lesson.explanation
-            )
+        st.header("💡 Analogia")
 
-        st.header("Analogia")
         st.info(
             lesson.analogy
         )
 
-        st.header(
-            "Aplicações Práticas"
-        )
+        st.divider()
+
+        st.header("🌎 Aplicações Práticas")
 
         st.write(
             lesson.applications
         )
 
-        st.header(
-            "Dica do Professor"
-        )
+        st.divider()
+
+        st.header("🎯 Dica do Professor")
 
         st.success(
             lesson.tip
         )
 
-        st.header(
-            "Resumo"
-        )
+        st.divider()
+
+        st.header("📝 Resumo")
 
         for point in lesson.summary_points:
 
             st.markdown(
                 f"- {point}"
             )
-
     # =====================================
     # EXERCÍCIOS
     # =====================================
 
     with tabs[1]:
 
-        st.header(
-            "Exercícios de Fixação"
+        st.header("📝 Exercícios de Fixação")
+
+        exercise_tabs = st.tabs(
+            [
+                "📄 Questões",
+                "✅ Gabarito"
+            ]
         )
 
-        for i, exercise in enumerate(
-            lesson.exercises,
-            start=1
-        ):
+        # -----------------------------
+        # QUESTÕES
+        # -----------------------------
 
-            difficulty = (
-                exercise.difficulty.upper()
+        with exercise_tabs[0]:
+
+            st.info(
+                "Tente resolver as questões antes de consultar o gabarito."
             )
 
-            with st.expander(
-                f"Questão {i} ({difficulty})"
+            for i, exercise in enumerate(
+                lesson.exercises,
+                start=1
             ):
 
-                st.markdown(
-                    f"### Pergunta\n\n{exercise.question}"
+                difficulty = (
+                    exercise.difficulty.lower()
                 )
 
-                st.markdown(
-                    "### Resposta"
+                if difficulty == "easy":
+                    emoji = "🟢"
+                    label = "Fácil"
+
+                elif difficulty == "medium":
+                    emoji = "🟡"
+                    label = "Médio"
+
+                else:
+                    emoji = "🔴"
+                    label = "Difícil"
+
+                with st.container(border=True):
+
+                    st.subheader(
+                        f"{emoji} Questão {i}"
+                    )
+
+                    st.caption(
+                        f"Dificuldade: {label}"
+                    )
+
+                    st.write(
+                        exercise.question
+                    )
+
+                    st.text_area(
+                        "Sua resposta (opcional)",
+                        key=f"user_answer_{i}",
+                        height=120,
+                        placeholder="Digite sua resposta aqui..."
+                    )
+
+        # -----------------------------
+        # GABARITO
+        # -----------------------------
+
+        with exercise_tabs[1]:
+
+            st.warning(
+                "Consulte o gabarito somente após tentar resolver as questões."
+            )
+
+            for i, exercise in enumerate(
+                lesson.exercises,
+                start=1
+            ):
+
+                difficulty = (
+                    exercise.difficulty.lower()
                 )
 
-                st.write(
-                    exercise.answer
-                )
+                if difficulty == "easy":
+                    emoji = "🟢"
+                    label = "Fácil"
 
+                elif difficulty == "medium":
+                    emoji = "🟡"
+                    label = "Médio"
+
+                else:
+                    emoji = "🔴"
+                    label = "Difícil"
+
+                with st.expander(
+                    f"{emoji} Questão {i} ({label})"
+                ):
+
+                    st.markdown(
+                        "### Pergunta"
+                    )
+
+                    st.write(
+                        exercise.question
+                    )
+
+                    st.markdown(
+                        "### Resposta"
+                    )
+
+                    st.success(
+                        exercise.answer
+                    )
     # =====================================
     # PESQUISA
     # =====================================
@@ -262,60 +396,119 @@ if st.session_state.result:
 
         research = result["research"]
 
-        st.header(
-            "Relatório de Pesquisa"
+        st.header("🔎 Relatório de Pesquisa")
+
+        st.info(
+            "Este relatório foi produzido pelo agente Researcher e serviu como base para os demais agentes."
         )
 
-        st.markdown(
-            research.report
-        )
-
-        # -------------------------
-        # Markdown
-        # -------------------------
-
-        st.download_button(
-            label="📥 Baixar Markdown",
-            data=research.report,
-            file_name=(
-                f"{st.session_state.topic}_pesquisa.md"
-            ),
-            mime="text/markdown"
-        )
-
-        # -------------------------
-        # PDF
-        # -------------------------
-
-        pdf_file = create_pdf(
-            f"Pesquisa - {st.session_state.topic}",
-            research.report
-        )
-
-        st.download_button(
-            label="📄 Baixar PDF",
-            data=pdf_file,
-            file_name=(
-                f"{st.session_state.topic}_pesquisa.pdf"
-            ),
-            mime="application/pdf"
-        )
+        st.markdown(research.report)
 
         st.divider()
 
-        st.header(
-            "Etapas da Pesquisa"
+        # =====================================
+        # DOWNLOADS
+        # =====================================
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            st.download_button(
+                label="📥 Baixar Markdown",
+                data=research.report,
+                file_name=(
+                    f"{st.session_state.topic}_pesquisa.md"
+                ),
+                mime="text/markdown",
+                use_container_width=True
+            )
+
+        with col2:
+
+            pdf_file = create_pdf(
+                f"Pesquisa - {st.session_state.topic}",
+                research.report
+            )
+
+            st.download_button(
+                label="📄 Baixar PDF",
+                data=pdf_file,
+                file_name=(
+                    f"{st.session_state.topic}_pesquisa.pdf"
+                ),
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+        st.divider()
+
+        # =====================================
+        # ETAPAS DA PESQUISA
+        # =====================================
+
+        st.header("🛠 Histórico da Pesquisa")
+
+        st.caption(
+            "Ferramentas utilizadas pelo agente Researcher durante a investigação."
         )
 
-        for step in research.research_steps:
+        if research.research_steps:
 
-            with st.expander(
-                f"🔧 {step.tool}"
+            for index, step in enumerate(
+                research.research_steps,
+                start=1
             ):
 
-                st.json(
-                    {
-                        "args": step.args,
-                        "result": step.result
-                    }
-                )
+                with st.expander(
+                    f"{index}. {step.tool}"
+                ):
+
+                    col1, col2 = st.columns(
+                        [1, 3]
+                    )
+
+                    with col1:
+
+                        st.markdown(
+                            "**Ferramenta**"
+                        )
+
+                        st.code(
+                            step.tool
+                        )
+
+                    with col2:
+
+                        st.markdown(
+                            "**Parâmetros**"
+                        )
+
+                        st.json(
+                            step.args
+                        )
+
+                    st.markdown(
+                        "**Resultado Obtido**"
+                    )
+
+                    st.text_area(
+                        label="",
+                        value=step.result,
+                        height=250,
+                        disabled=True,
+                        key=f"tool_result_{index}"
+                    )
+
+        else:
+
+            st.success(
+                "Nenhuma ferramenta foi utilizada nesta pesquisa."
+            )
+
+        st.divider()
+
+        st.success(
+            "✅ Fluxo concluído com sucesso!\n\n"
+            "Researcher → Reviewer → Professor"
+        )

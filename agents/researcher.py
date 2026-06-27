@@ -18,10 +18,6 @@ load_dotenv()
 MAX_TOOL_RESULT = 4000
 
 
-# ==========================
-# PROMPTS
-# ==========================
-
 with open(
     "prompts/researcher_system.txt",
     "r",
@@ -161,9 +157,6 @@ class ResearcherAgent:
         query: str
     ) -> ResearchReport:
 
-        # =====================================
-        # STEP 1 - PEDAGOGICAL PLANNING
-        # =====================================
 
         print("\n=== RESEARCH PLANNING ===")
 
@@ -175,9 +168,6 @@ class ResearcherAgent:
 
         print(plan.content[:1000])
 
-        # =====================================
-        # INITIAL PROMPT
-        # =====================================
 
         messages = research_prompt.format_messages(
             query=query,
@@ -205,10 +195,7 @@ class ResearcherAgent:
                 response.tool_calls
             )
 
-            # -----------------------------
-            # FINALIZA A PESQUISA
-            # -----------------------------
-
+        
             if not response.tool_calls:
 
                 if len(research_memory) == 0:
@@ -231,9 +218,7 @@ class ResearcherAgent:
 
             messages.append(response)
 
-            # -----------------------------
-            # TOOL EXECUTION
-            # -----------------------------
+         
 
             for tool_call in response.tool_calls:
 
@@ -338,9 +323,6 @@ class ResearcherAgent:
 
                 )
 
-        # =====================================
-        # STEP 3 - SYNTHESIS
-        # =====================================
 
         print("\n=== SYNTHESIS ===")
 
